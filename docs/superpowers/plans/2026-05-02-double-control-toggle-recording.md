@@ -51,8 +51,7 @@ Implement only trigger behavior and user-facing trigger descriptions:
 
 - Create: `Sources/VoiceTextCore/ControlKeyTapTracker.swift`
 - Create: `Tests/VoiceTextCoreTests/ControlKeyTapTrackerTests.swift`
-
-- [ ] **Step 1: Write failing tests**
+- **Step 1: Write failing tests**
 
 Create `Tests/VoiceTextCoreTests/ControlKeyTapTrackerTests.swift`:
 
@@ -103,7 +102,7 @@ final class ControlKeyTapTrackerTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -113,7 +112,7 @@ swift test --filter ControlKeyTapTrackerTests
 
 Expected: fail to compile with an error equivalent to `cannot find 'ControlKeyTapTracker' in scope`.
 
-- [ ] **Step 3: Add minimal tracker implementation**
+- **Step 3: Add minimal tracker implementation**
 
 Create `Sources/VoiceTextCore/ControlKeyTapTracker.swift`:
 
@@ -151,7 +150,7 @@ public struct ControlKeyTapTracker {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -161,7 +160,7 @@ swift test --filter ControlKeyTapTrackerTests
 
 Expected: exit code `0`, with `ControlKeyTapTrackerTests` passing.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 Run:
 
@@ -179,8 +178,7 @@ Expected: commit succeeds.
 **Files:**
 
 - Rename: `Sources/VoiceTextApp/HoldControlKeyService.swift` to `Sources/VoiceTextApp/ControlKeyRecordingTriggerService.swift`
-
-- [ ] **Step 1: Rename the file**
+- **Step 1: Rename the file**
 
 Run:
 
@@ -190,7 +188,7 @@ git mv Sources/VoiceTextApp/HoldControlKeyService.swift Sources/VoiceTextApp/Con
 
 Expected: file is renamed and still tracked by git.
 
-- [ ] **Step 2: Replace the service implementation**
+- **Step 2: Replace the service implementation**
 
 Replace the full contents of `Sources/VoiceTextApp/ControlKeyRecordingTriggerService.swift` with:
 
@@ -350,7 +348,7 @@ final class ControlKeyRecordingTriggerService {
 }
 ```
 
-- [ ] **Step 3: Typecheck the renamed service**
+- **Step 3: Typecheck the renamed service**
 
 Run:
 
@@ -360,7 +358,7 @@ swiftc -typecheck -sdk "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" Sou
 
 Expected: fail because `AppDelegate` still references `HoldControlKeyService`.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 Run this after Task 3 passes, not immediately after Step 3:
 
@@ -379,8 +377,7 @@ Expected: commit succeeds after the AppDelegate wiring task is complete.
 **Files:**
 
 - Modify: `Sources/VoiceTextApp/AppDelegate.swift`
-
-- [ ] **Step 1: Replace the stored service property**
+- **Step 1: Replace the stored service property**
 
 In `AppDelegate`, replace:
 
@@ -394,7 +391,7 @@ with:
 private var controlKeyRecordingTriggerService: ControlKeyRecordingTriggerService?
 ```
 
-- [ ] **Step 2: Reset trigger mode when recording ends outside the trigger service**
+- **Step 2: Reset trigger mode when recording ends outside the trigger service**
 
 Replace the `controller.onStateChange` assignment with:
 
@@ -412,7 +409,7 @@ controller.onStateChange = { [weak self, weak statusController] state in
 }
 ```
 
-- [ ] **Step 3: Replace hold-only service setup**
+- **Step 3: Replace hold-only service setup**
 
 In `applicationDidFinishLaunching`, replace:
 
@@ -448,7 +445,7 @@ let controlKeyRecordingTriggerService = ControlKeyRecordingTriggerService(
 controlKeyRecordingTriggerService.register()
 ```
 
-- [ ] **Step 4: Store the new service**
+- **Step 4: Store the new service**
 
 In `applicationDidFinishLaunching`, replace:
 
@@ -462,7 +459,7 @@ with:
 self.controlKeyRecordingTriggerService = controlKeyRecordingTriggerService
 ```
 
-- [ ] **Step 5: Update the hotkey description**
+- **Step 5: Update the hotkey description**
 
 Replace `hotkeyDescription(for:)` with:
 
@@ -472,7 +469,7 @@ private static func hotkeyDescription(for configuration: ASRConfiguration) -> St
 }
 ```
 
-- [ ] **Step 6: Typecheck**
+- **Step 6: Typecheck**
 
 Run:
 
@@ -482,7 +479,7 @@ swiftc -typecheck -sdk "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" Sou
 
 Expected: exit code `0`.
 
-- [ ] **Step 7: Commit Tasks 2 and 3 together**
+- **Step 7: Commit Tasks 2 and 3 together**
 
 Run:
 
@@ -502,8 +499,7 @@ Expected: commit succeeds.
 
 - Modify: `Sources/VoiceTextApp/StatusBarController.swift`
 - Modify: `Sources/VoiceTextApp/SettingsWindowController.swift`
-
-- [ ] **Step 1: Update status bar default text**
+- **Step 1: Update status bar default text**
 
 In `StatusBarController`, replace the two hold-only strings:
 
@@ -519,7 +515,7 @@ private let hotkeyItem = NSMenuItem(title: "快捷键：按住 Control 说话，
 private var hotkeyDescription = "按住 Control 说话，松开结束；或双击 Control 开始/结束"
 ```
 
-- [ ] **Step 2: Update settings subtitle**
+- **Step 2: Update settings subtitle**
 
 In `SettingsWindowController.buildContent()`, replace:
 
@@ -533,7 +529,7 @@ with:
 let subtitle = NSTextField(labelWithString: "登录后可按住 Control 说话，也可双击 Control 开始/结束。")
 ```
 
-- [ ] **Step 3: Update settings trigger label**
+- **Step 3: Update settings trigger label**
 
 In `SettingsWindowController.hotkeyDescription(keyCode:modifiers:)`, replace:
 
@@ -547,7 +543,7 @@ with:
 "按住 Control 说话，松开结束；或双击 Control 开始/结束"
 ```
 
-- [ ] **Step 4: Typecheck**
+- **Step 4: Typecheck**
 
 Run:
 
@@ -557,7 +553,7 @@ swiftc -typecheck -sdk "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" Sou
 
 Expected: exit code `0`.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 Run:
 
@@ -575,8 +571,7 @@ Expected: commit succeeds.
 **Files:**
 
 - Modify: `README.md`
-
-- [ ] **Step 1: Update product description**
+- **Step 1: Update product description**
 
 In `README.md`, replace:
 
@@ -590,7 +585,7 @@ with:
 VoiceText 是一个轻量 macOS 状态栏语音输入工具。它支持按住 `Control` 说话、松开结束，也支持双击 `Control` 开始录音、再次双击 `Control` 结束录音。录音期间会把音频流发送到公司 ASR WebSocket 服务，并将识别结果插入当前焦点输入框。
 ```
 
-- [ ] **Step 2: Update config docs**
+- **Step 2: Update config docs**
 
 In `README.md`, replace:
 
@@ -604,7 +599,7 @@ with:
 - `hotkeyKeyCode` / `hotkeyModifiers`：历史配置字段，当前默认录音方式为按住 `Control` 或双击 `Control`
 ```
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 Run:
 
@@ -628,8 +623,7 @@ Expected: commit succeeds.
 - Verify: `Sources/VoiceTextApp/StatusBarController.swift`
 - Verify: `Sources/VoiceTextApp/SettingsWindowController.swift`
 - Verify: `README.md`
-
-- [ ] **Step 1: Run unit tests**
+- **Step 1: Run unit tests**
 
 Run:
 
@@ -639,7 +633,7 @@ swift test
 
 Expected: exit code `0`.
 
-- [ ] **Step 2: Typecheck app target**
+- **Step 2: Typecheck app target**
 
 Run:
 
@@ -649,7 +643,7 @@ swiftc -typecheck -sdk "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" Sou
 
 Expected: exit code `0`.
 
-- [ ] **Step 3: Build app bundle**
+- **Step 3: Build app bundle**
 
 Run:
 
@@ -663,7 +657,7 @@ Expected output includes:
 Built /Users/wangzhigang/a-idea/voice-text/build/VoiceText.app
 ```
 
-- [ ] **Step 4: Launch the app with a fresh log**
+- **Step 4: Launch the app with a fresh log**
 
 Run:
 
@@ -673,7 +667,7 @@ Run:
 
 Expected output includes a running `VoiceTextApp` process.
 
-- [ ] **Step 5: Verify startup log**
+- **Step 5: Verify startup log**
 
 Read `/tmp/voicetext.log`.
 
@@ -683,7 +677,7 @@ Expected line:
 Control key recording trigger registered
 ```
 
-- [ ] **Step 6: Manual test hold mode**
+- **Step 6: Manual test hold mode**
 
 Perform this sequence:
 
@@ -705,7 +699,7 @@ Recording stop requested by trigger mode=hold
 Recording stop requested
 ```
 
-- [ ] **Step 7: Manual test locked double-tap mode**
+- **Step 7: Manual test locked double-tap mode**
 
 Perform this sequence:
 
@@ -728,7 +722,7 @@ Recording stop requested by trigger mode=locked
 Recording stop requested
 ```
 
-- [ ] **Step 8: Manual test conflict behavior**
+- **Step 8: Manual test conflict behavior**
 
 Perform this sequence:
 
@@ -742,7 +736,7 @@ Double-tap Control to stop locked recording.
 
 Expected: the hold press during locked recording does not emit `Hold Control recording ended` and does not stop recording.
 
-- [ ] **Step 9: Final commit if verification changed files**
+- **Step 9: Final commit if verification changed files**
 
 Run:
 

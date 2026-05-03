@@ -70,6 +70,9 @@ public final class AudioCaptureService {
     }
 
     public func stop() {
+        guard isRunning else {
+            return
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRunning = false

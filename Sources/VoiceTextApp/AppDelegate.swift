@@ -20,9 +20,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusController = StatusBarController()
         let previewWindowController = RecognitionPreviewWindowController()
 
-        controller.onStateChange = { [weak statusController] state in
+        controller.onStateChange = { [weak self, weak statusController] state in
             DispatchQueue.main.async {
                 statusController?.update(state: state)
+                switch state {
+                case .idle, .error:
+                    self?.holdControlKeyService?.resetTriggerState()
+                case .connecting, .recording:
+                    break
+                }
             }
         }
         controller.onPreviewChange = { [weak previewWindowController] state in
@@ -64,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onHoldEnded: { [weak controller] in
                 controller?.stop()
+            },
+            onDoubleTap: { [weak controller] in
+                controller?.toggle()
             }
         )
         holdControlKeyService.register()
@@ -95,6 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func hotkeyDescription(for configuration: ASRConfiguration) -> String {
-        "按住 Control 说话，松开结束"
+        "按住 Control 说话，松开结束；双击 Control 开始/停止"
     }
 }

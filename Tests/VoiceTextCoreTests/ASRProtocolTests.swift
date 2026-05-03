@@ -39,11 +39,36 @@ final class ASRProtocolTests: XCTestCase {
         XCTAssertEqual(params?["useAutoVAD"], "true")
         XCTAssertEqual(params?["silence4StopInMilli"], "500")
         XCTAssertEqual(params?["silence4TimeoutInMilli"], "500")
-        XCTAssertEqual(params?["needNormalization"], "true")
+        XCTAssertEqual(params?["needNormalization"], "false")
         XCTAssertEqual(params?["needDenoise"], "true")
         XCTAssertEqual(params?["deviceId"], "d-1")
         XCTAssertEqual(params?["userId"], "u-1")
         XCTAssertEqual(params?["client"], "Android")
+    }
+
+    func testBuildsInitMessageOnlyAllowsConfiguredCompletionPause() throws {
+        let config = ASRConfiguration(
+            environment: .production,
+            userId: "u-1",
+            role: .teacher,
+            deviceId: "d-1",
+            cookieHeader: "a=b",
+            useAutoVAD: false,
+            silence4StopInMilli: 900,
+            silence4TimeoutInMilli: 1500,
+            needNormalization: false,
+            needDenoise: false
+        )
+
+        let data = try ASRProtocol.makeInitMessage(config: config)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let params = json?["params"] as? [String: String]
+
+        XCTAssertEqual(params?["useAutoVAD"], "true")
+        XCTAssertEqual(params?["silence4StopInMilli"], "900")
+        XCTAssertEqual(params?["silence4TimeoutInMilli"], "500")
+        XCTAssertEqual(params?["needNormalization"], "false")
+        XCTAssertEqual(params?["needDenoise"], "true")
     }
 
     func testBuildsBase64AudioPacketWithoutLineWrapping() throws {

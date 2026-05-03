@@ -31,6 +31,11 @@ public struct ASRConfiguration: Codable, Equatable, Sendable {
     public var additionalHeaders: [String: String]
     public var hotkeyKeyCode: UInt32
     public var hotkeyModifiers: UInt32
+    public var useAutoVAD: Bool
+    public var silence4StopInMilli: Int
+    public var silence4TimeoutInMilli: Int
+    public var needNormalization: Bool
+    public var needDenoise: Bool
 
     private enum CodingKeys: String, CodingKey {
         case environment
@@ -44,6 +49,11 @@ public struct ASRConfiguration: Codable, Equatable, Sendable {
         case additionalHeaders
         case hotkeyKeyCode
         case hotkeyModifiers
+        case useAutoVAD
+        case silence4StopInMilli
+        case silence4TimeoutInMilli
+        case needNormalization
+        case needDenoise
     }
 
     public init(
@@ -57,7 +67,12 @@ public struct ASRConfiguration: Codable, Equatable, Sendable {
         authToken: String = "",
         additionalHeaders: [String: String] = [:],
         hotkeyKeyCode: UInt32 = 49,
-        hotkeyModifiers: UInt32 = 1 << 11
+        hotkeyModifiers: UInt32 = 1 << 11,
+        useAutoVAD: Bool = true,
+        silence4StopInMilli: Int = 500,
+        silence4TimeoutInMilli: Int = 500,
+        needNormalization: Bool = false,
+        needDenoise: Bool = true
     ) {
         self.environment = environment
         self.userId = userId
@@ -70,6 +85,11 @@ public struct ASRConfiguration: Codable, Equatable, Sendable {
         self.additionalHeaders = additionalHeaders
         self.hotkeyKeyCode = hotkeyKeyCode
         self.hotkeyModifiers = hotkeyModifiers
+        self.useAutoVAD = useAutoVAD
+        self.silence4StopInMilli = silence4StopInMilli
+        self.silence4TimeoutInMilli = silence4TimeoutInMilli
+        self.needNormalization = needNormalization
+        self.needDenoise = needDenoise
     }
 
     public init(from decoder: Decoder) throws {
@@ -85,6 +105,11 @@ public struct ASRConfiguration: Codable, Equatable, Sendable {
         additionalHeaders = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
         hotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyKeyCode) ?? 49
         hotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyModifiers) ?? (1 << 11)
+        useAutoVAD = try container.decodeIfPresent(Bool.self, forKey: .useAutoVAD) ?? true
+        silence4StopInMilli = try container.decodeIfPresent(Int.self, forKey: .silence4StopInMilli) ?? 500
+        silence4TimeoutInMilli = try container.decodeIfPresent(Int.self, forKey: .silence4TimeoutInMilli) ?? 500
+        needNormalization = try container.decodeIfPresent(Bool.self, forKey: .needNormalization) ?? false
+        needDenoise = try container.decodeIfPresent(Bool.self, forKey: .needDenoise) ?? true
     }
 
     public static func defaultConfiguration() -> ASRConfiguration {

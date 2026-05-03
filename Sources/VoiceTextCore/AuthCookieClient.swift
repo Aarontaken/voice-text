@@ -88,7 +88,12 @@ public enum AuthCookieClient {
             authToken: configuration.authToken,
             additionalHeaders: headers,
             hotkeyKeyCode: configuration.hotkeyKeyCode,
-            hotkeyModifiers: configuration.hotkeyModifiers
+            hotkeyModifiers: configuration.hotkeyModifiers,
+            useAutoVAD: configuration.useAutoVAD,
+            silence4StopInMilli: configuration.silence4StopInMilli,
+            silence4TimeoutInMilli: configuration.silence4TimeoutInMilli,
+            needNormalization: configuration.needNormalization,
+            needDenoise: configuration.needDenoise
         )
     }
 

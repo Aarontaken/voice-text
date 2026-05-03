@@ -42,7 +42,9 @@ final class RecordingController {
     }
 
     func update(configuration: ASRConfiguration) {
-        stop()
+        if state == .connecting || state == .recording {
+            stop()
+        }
         self.configuration = configuration
     }
 

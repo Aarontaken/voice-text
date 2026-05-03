@@ -29,4 +29,32 @@ final class PasswordLoginClientTests: XCTestCase {
 
         XCTAssertEqual(token, "abc.def.ghi")
     }
+
+    func testConfigurationByApplyingLoginPreservesAdvancedASRSettings() {
+        let config = ASRConfiguration(
+            environment: .test,
+            userId: "u-1",
+            role: .student,
+            deviceId: "d-1",
+            cookieHeader: "sid=abc",
+            useAutoVAD: false,
+            silence4StopInMilli: 700,
+            silence4TimeoutInMilli: 1400,
+            needNormalization: false,
+            needDenoise: false
+        )
+
+        let updated = PasswordLoginClient.configurationByApplyingLogin(
+            token: "token-1",
+            phone: "13800000000",
+            password: "secret",
+            to: config
+        )
+
+        XCTAssertEqual(updated.useAutoVAD, false)
+        XCTAssertEqual(updated.silence4StopInMilli, 700)
+        XCTAssertEqual(updated.silence4TimeoutInMilli, 1400)
+        XCTAssertEqual(updated.needNormalization, false)
+        XCTAssertEqual(updated.needDenoise, false)
+    }
 }
