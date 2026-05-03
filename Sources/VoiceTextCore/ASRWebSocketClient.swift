@@ -53,11 +53,17 @@ public final class ASRWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         try sendData(message)
     }
 
-    public func stop() {
-        VoiceTextLogger.log("ASR stop")
+    /// Tells the ASR service to finalize results; keeps the socket open so final messages can still be received.
+    public func sendSessionStop() {
+        VoiceTextLogger.log("ASR send session stop (keep receiving)")
         if let stopMessage = try? ASRProtocol.makeStopMessage() {
             try? sendData(stopMessage)
         }
+    }
+
+    /// Stops reading from the socket and tears down the URLSession after a short delay.
+    public func closeConnection() {
+        VoiceTextLogger.log("ASR close connection")
         let taskToCancel = task
         let sessionToCancel = session
         task = nil
@@ -67,6 +73,13 @@ public final class ASRWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             taskToCancel?.cancel(with: .normalClosure, reason: nil)
             sessionToCancel?.invalidateAndCancel()
         }
+    }
+
+    /// Sends session stop and closes the connection (full shutdown).
+    public func stop() {
+        VoiceTextLogger.log("ASR stop")
+        sendSessionStop()
+        closeConnection()
     }
 
     public func urlSession(

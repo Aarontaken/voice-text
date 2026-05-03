@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch state {
                 case .idle, .error:
                     self?.holdControlKeyService?.resetTriggerState()
-                case .connecting, .recording:
+                case .connecting, .recording, .draining:
                     break
                 }
             }

@@ -47,6 +47,10 @@ final class StatusBarController {
             item.button?.title = "REC"
             stateItem.title = "识别中"
             toggleItem.title = "停止识别"
+        case .draining:
+            item.button?.title = "…"
+            stateItem.title = "收尾中"
+            toggleItem.title = "停止识别"
         case let .error(message):
             item.button?.title = "!"
             stateItem.title = "错误：\(message)"

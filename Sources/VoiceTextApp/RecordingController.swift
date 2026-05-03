@@ -6,6 +6,8 @@ enum RecordingState: Equatable {
     case idle
     case connecting
     case recording
+    /// User ended recording; waiting briefly for final ASR messages before tearing down the socket.
+    case draining
     case error(String)
 }
 
@@ -29,6 +31,11 @@ final class RecordingController {
     private var startTask: Task<Void, Never>?
     private var recordingSessionID = UUID()
     private var currentSegmentFinalInserted = false
+    /// Latest streaming (non-final) ASR text shown in the preview; flushed on stop if no final arrived yet.
+    private var pendingNonFinalPreviewText: String?
+    /// True after `sendSessionStop()` during drain; `finalizeSessionEnd` only closes the socket (no duplicate stop frame).
+    private var endSessionStopAlreadySent = false
+    private var drainTimeoutWorkItem: DispatchWorkItem?
     private var state: RecordingState = .idle {
         didSet {
             onStateChange?(state)
@@ -42,7 +49,7 @@ final class RecordingController {
     }
 
     func update(configuration: ASRConfiguration) {
-        if state == .connecting || state == .recording {
+        if state == .connecting || state == .recording || state == .draining {
             stop()
         }
         self.configuration = configuration
@@ -52,7 +59,7 @@ final class RecordingController {
         switch state {
         case .idle, .error:
             start()
-        case .connecting, .recording:
+        case .connecting, .recording, .draining:
             stop()
         }
     }
@@ -63,6 +70,9 @@ final class RecordingController {
         let sessionID = UUID()
         recordingSessionID = sessionID
         onPreviewChange?(.preparing)
+        pendingNonFinalPreviewText = nil
+        endSessionStopAlreadySent = false
+        cancelDrainTimeout()
         currentSegmentFinalInserted = false
         state = .connecting
 
@@ -108,15 +118,16 @@ final class RecordingController {
 
     func stop() {
         VoiceTextLogger.log("Recording stop requested")
-        startTask?.cancel()
-        startTask = nil
-        recordingSessionID = UUID()
-        audioCapture.stop()
-        asrClient?.stop()
-        asrClient = nil
-        onPreviewChange?(.hidden)
-        currentSegmentFinalInserted = false
-        state = .idle
+        switch state {
+        case .idle, .error:
+            return
+        case .draining:
+            finalizeSessionEnd()
+        case .connecting:
+            finalizeSessionEnd()
+        case .recording:
+            beginDrainingStop()
+        }
     }
 
     private var isErrorState: Bool {
@@ -130,6 +141,56 @@ final class RecordingController {
         recordingSessionID == sessionID && state != .idle
     }
 
+    private func cancelDrainTimeout() {
+        drainTimeoutWorkItem?.cancel()
+        drainTimeoutWorkItem = nil
+    }
+
+    private func beginDrainingStop() {
+        guard state == .recording else { return }
+        VoiceTextLogger.log("Recording entering drain for final ASR messages")
+        startTask?.cancel()
+        startTask = nil
+        audioCapture.stop()
+        endSessionStopAlreadySent = true
+        asrClient?.sendSessionStop()
+        state = .draining
+        let sessionID = recordingSessionID
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.state == .draining, self.recordingSessionID == sessionID else { return }
+            self.finalizeSessionEnd()
+        }
+        drainTimeoutWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+    }
+
+    private func finalizeSessionEnd() {
+        cancelDrainTimeout()
+        switch state {
+        case .connecting, .recording, .draining:
+            break
+        case .idle, .error:
+            return
+        }
+        flushPendingPreviewIfNeeded()
+        startTask?.cancel()
+        startTask = nil
+        recordingSessionID = UUID()
+        audioCapture.stop()
+        if endSessionStopAlreadySent {
+            endSessionStopAlreadySent = false
+            asrClient?.closeConnection()
+        } else {
+            asrClient?.stop()
+        }
+        asrClient = nil
+        onPreviewChange?(.hidden)
+        currentSegmentFinalInserted = false
+        state = .idle
+        VoiceTextLogger.log("Recording session finalized")
+    }
+
     private func handle(_ event: ASRClientEvent, sessionID: UUID) {
         guard isCurrentSession(sessionID) else { return }
         switch event {
@@ -138,7 +199,7 @@ final class RecordingController {
         case let .recognition(result):
             insert(result)
         case .disconnected:
-            stop()
+            finalizeSessionEnd()
         case let .failed(message):
             fail(message)
         }
@@ -183,10 +244,12 @@ final class RecordingController {
     private func insert(_ result: RecognitionResult) {
         guard result.isFinal else {
             currentSegmentFinalInserted = false
+            pendingNonFinalPreviewText = result.text
             onPreviewChange?(.preview(result.text))
             VoiceTextLogger.log("ASR streaming preview textCount=\(result.text.count)")
             return
         }
+        pendingNonFinalPreviewText = nil
         guard !currentSegmentFinalInserted else {
             VoiceTextLogger.log("ASR duplicate final ignored textCount=\(result.text.count)")
             return
@@ -222,12 +285,19 @@ final class RecordingController {
     )
 
     private func fail(_ message: String) {
+        cancelDrainTimeout()
+        flushPendingPreviewIfNeeded()
         VoiceTextLogger.log("Recording failed: \(message)")
         startTask?.cancel()
         startTask = nil
         recordingSessionID = UUID()
         audioCapture.stop()
-        asrClient?.stop()
+        if endSessionStopAlreadySent {
+            endSessionStopAlreadySent = false
+            asrClient?.closeConnection()
+        } else {
+            asrClient?.stop()
+        }
         asrClient = nil
         onPreviewChange?(.hidden)
         state = .error(message)
@@ -235,5 +305,20 @@ final class RecordingController {
 
     private func playRecordingStartedSound() {
         NSSound(named: NSSound.Name("Tink"))?.play()
+    }
+
+    /// Inserts preview-only (non-final) text so it is not lost when recording ends before a final result.
+    private func flushPendingPreviewIfNeeded() {
+        let raw = pendingNonFinalPreviewText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pendingNonFinalPreviewText = nil
+        guard !raw.isEmpty else { return }
+        let delta = textForInsertion(from: raw)
+        guard !delta.isEmpty else { return }
+        VoiceTextLogger.log("ASR flush pending preview on end textCount=\(raw.count) insertCount=\(delta.count)")
+        do {
+            try textInserter.insert(delta)
+        } catch {
+            VoiceTextLogger.log("Text insertion failed on pending preview flush: \(error.localizedDescription)")
+        }
     }
 }
