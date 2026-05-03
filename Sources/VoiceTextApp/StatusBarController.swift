@@ -1,6 +1,6 @@
 import AppKit
 
-final class StatusBarController {
+final class StatusBarController: NSObject, NSMenuDelegate {
     var onToggle: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onRequestAccessibility: (() -> Void)?
@@ -12,10 +12,13 @@ final class StatusBarController {
     private let hotkeyItem = NSMenuItem(title: "快捷键：按住 Control 说话，松开结束；双击 Control 开始/停止", action: nil, keyEquivalent: "")
     private let accessibilityStatusItem = NSMenuItem(title: "辅助功能：未知", action: nil, keyEquivalent: "")
     private var hotkeyDescription = "按住 Control 说话，松开结束；双击 Control 开始/停止"
+    private var didBecomeActiveObserver: NSObjectProtocol?
 
-    init() {
+    override init() {
+        super.init()
         item.button?.title = "VT"
         let menu = NSMenu()
+        menu.delegate = self
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(.separator())
@@ -30,6 +33,24 @@ final class StatusBarController {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q").targeting(self))
         item.menu = menu
+
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateAccessibilityStatus()
+        }
+    }
+
+    deinit {
+        if let didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        updateAccessibilityStatus()
     }
 
     func update(state: RecordingState) {
