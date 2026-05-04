@@ -76,7 +76,7 @@ final class SettingsWindowController: NSWindowController {
         let title = NSTextField(labelWithString: "VoiceText 设置")
         title.font = .systemFont(ofSize: 22, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "登录后使用 Control 录音，可按住说话，也可双击开始或停止。")
+        let subtitle = NSTextField(labelWithString: "登录后按住 Option (⌥) 说话，松开结束；也可双击 Control 开始或停止录音。")
         subtitle.font = .systemFont(ofSize: 13)
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byWordWrapping
@@ -470,6 +470,6 @@ final class SettingsWindowController: NSWindowController {
     }
 
     private func hotkeyDescription(keyCode: UInt32, modifiers: UInt32) -> String {
-        "按住 Control 说话，松开结束\n双击 Control 开始/停止"
+        "按住 Option (⌥) 说话，松开结束\n双击 Control 开始/停止"
     }
 }

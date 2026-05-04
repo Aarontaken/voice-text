@@ -9,9 +9,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let toggleItem = NSMenuItem(title: "开始识别", action: #selector(toggle), keyEquivalent: "")
     private let stateItem = NSMenuItem(title: "空闲", action: nil, keyEquivalent: "")
-    private let hotkeyItem = NSMenuItem(title: "快捷键：按住 Control 说话，松开结束；双击 Control 开始/停止", action: nil, keyEquivalent: "")
+    private let hotkeyItem = NSMenuItem(title: "快捷键：按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止", action: nil, keyEquivalent: "")
     private let accessibilityStatusItem = NSMenuItem(title: "辅助功能：未知", action: nil, keyEquivalent: "")
-    private var hotkeyDescription = "按住 Control 说话，松开结束；双击 Control 开始/停止"
+    private var hotkeyDescription = "按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止"
     private var didBecomeActiveObserver: NSObjectProtocol?
 
     override init() {

@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let textInserter = TextInsertionService()
     private var statusController: StatusBarController?
     private var recordingController: RecordingController?
-    private var holdControlKeyService: HoldControlKeyService?
+    private var holdOptionKeyService: HoldOptionKeyService?
     private var settingsWindowController: SettingsWindowController?
     private var previewWindowController: RecognitionPreviewWindowController?
 
@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 statusController?.update(state: state)
                 switch state {
                 case .idle, .error:
-                    self?.holdControlKeyService?.resetTriggerState()
+                    self?.holdOptionKeyService?.resetTriggerState()
                 case .connecting, .recording, .draining:
                     break
                 }
@@ -63,8 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.updateAccessibilityStatus()
         statusController.updateHotkeyDescription(Self.hotkeyDescription(for: configuration))
 
-        let holdControlKeyService = HoldControlKeyService(
-            holdThreshold: 0.5,
+        let holdOptionKeyService = HoldOptionKeyService(
+            holdThreshold: 0.25,
             onHoldBegan: { [weak controller] in
                 controller?.start()
             },
@@ -75,11 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 controller?.toggle()
             }
         )
-        holdControlKeyService.register()
+        holdOptionKeyService.register()
 
         self.recordingController = controller
         self.statusController = statusController
-        self.holdControlKeyService = holdControlKeyService
+        self.holdOptionKeyService = holdOptionKeyService
         self.previewWindowController = previewWindowController
     }
 
@@ -104,6 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func hotkeyDescription(for configuration: ASRConfiguration) -> String {
-        "按住 Control 说话，松开结束；双击 Control 开始/停止"
+        "按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止"
     }
 }
