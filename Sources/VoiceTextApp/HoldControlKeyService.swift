@@ -1,5 +1,11 @@
 import AppKit
+import CoreGraphics
 import VoiceTextCore
+
+private final class HoldControlHIDKeyTapContext {
+    weak var service: HoldControlKeyService?
+    var machPort: CFMachPort?
+}
 
 final class HoldControlKeyService {
     /// macOS virtual key codes for cursor arrows (system may handle Control+Arrow before some NSEvent paths).
@@ -21,6 +27,10 @@ final class HoldControlKeyService {
     private var keyDownGlobalMonitor: Any?
     private var keyDownLocalMonitor: Any?
     private var workspaceSpaceObserver: NSObjectProtocol?
+    private var hidKeyTapMachPort: CFMachPort?
+    private var hidKeyTapRunLoopSource: CFRunLoopSource?
+    /// Retained `HoldControlHIDKeyTapContext` passed as `userInfo` to `CGEvent.tapCreate`; released in `removeHIDKeyTap`.
+    private var hidKeyTapContextOpaque: UnsafeMutableRawPointer?
 
     init(
         holdThreshold: TimeInterval,
@@ -152,6 +162,7 @@ final class HoldControlKeyService {
             "Hold keyDown monitors installed global=\(keyDownGlobalMonitor != nil) local=\(keyDownLocalMonitor != nil) (global nil usually means Accessibility off)"
         )
         installWorkspaceSpaceObserver()
+        installHIDKeyTapIfNeeded()
     }
 
     private func installWorkspaceSpaceObserver() {
@@ -172,6 +183,7 @@ final class HoldControlKeyService {
     }
 
     private func removeHoldSessionInputObservers() {
+        removeHIDKeyTap()
         if let keyDownGlobalMonitor {
             NSEvent.removeMonitor(keyDownGlobalMonitor)
             self.keyDownGlobalMonitor = nil
@@ -186,29 +198,108 @@ final class HoldControlKeyService {
         }
     }
 
-    private func handleKeyDownDuringHold(_ event: NSEvent) {
-        guard didBeginHold, isControlPressed else { return }
-        if event.isARepeat { return }
-        if event.keyCode == 59 || event.keyCode == 62 { return }
+    private func installHIDKeyTapIfNeeded() {
+        guard hidKeyTapMachPort == nil else { return }
+        let ctx = HoldControlHIDKeyTapContext()
+        ctx.service = self
+        let opaque = Unmanaged.passRetained(ctx).toOpaque()
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        guard let port = CGEvent.tapCreate(
+            tap: .cghidEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: mask,
+            callback: Self.hidKeyTapCallback,
+            userInfo: opaque
+        ) else {
+            Unmanaged<HoldControlHIDKeyTapContext>.fromOpaque(opaque).release()
+            VoiceTextLogger.log("Hold Control CGHID key tap create failed (Accessibility / Input Monitoring)")
+            return
+        }
+        ctx.machPort = port
+        hidKeyTapContextOpaque = opaque
+        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: port, enable: true)
+        hidKeyTapMachPort = port
+        hidKeyTapRunLoopSource = runLoopSource
+        VoiceTextLogger.log("Hold Control CGHID listen-only keyDown tap installed")
+    }
 
-        let isArrow = Self.arrowKeyCodes.contains(event.keyCode)
-        let controlInEvent = event.modifierFlags.contains(.control)
+    private func removeHIDKeyTap() {
+        if let port = hidKeyTapMachPort {
+            CGEvent.tapEnable(tap: port, enable: false)
+            CFMachPortInvalidate(port)
+        }
+        if let src = hidKeyTapRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes)
+        }
+        hidKeyTapMachPort = nil
+        hidKeyTapRunLoopSource = nil
+        if let opaque = hidKeyTapContextOpaque {
+            Unmanaged<HoldControlHIDKeyTapContext>.fromOpaque(opaque).release()
+            hidKeyTapContextOpaque = nil
+        }
+    }
+
+    private static let hidKeyTapCallback: CGEventTapCallBack = { proxy, type, event, refcon in
+        guard let refcon else { return Unmanaged.passUnretained(event) }
+        let ctx = Unmanaged<HoldControlHIDKeyTapContext>.fromOpaque(refcon).takeUnretainedValue()
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let port = ctx.machPort {
+                CGEvent.tapEnable(tap: port, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        }
+        guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+        let keyCode = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = event.flags
+        let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        ctx.service?.considerCancellingHoldForPhysicalKeyDown(
+            keyCode: keyCode,
+            controlInEvent: flags.contains(.maskControl),
+            isAutoRepeat: isAutoRepeat,
+            sourceLabel: "CGHID"
+        )
+        return Unmanaged.passUnretained(event)
+    }
+
+    fileprivate func considerCancellingHoldForPhysicalKeyDown(
+        keyCode: UInt16,
+        controlInEvent: Bool,
+        isAutoRepeat: Bool,
+        sourceLabel: String
+    ) {
+        guard didBeginHold, isControlPressed else { return }
+        if isAutoRepeat { return }
+        if keyCode == 59 || keyCode == 62 { return }
+
+        let isArrow = Self.arrowKeyCodes.contains(keyCode)
         if controlInEvent || isArrow {
             VoiceTextLogger.log(
-                "Hold keyDown keyCode=\(event.keyCode) controlInEvent=\(controlInEvent) isArrow=\(isArrow) rawFlags=\(event.modifierFlags.rawValue)"
+                "Hold physical keyDown [\(sourceLabel)] keyCode=\(keyCode) control=\(controlInEvent) arrow=\(isArrow)"
             )
         }
 
         guard controlInEvent || isArrow else { return }
         if isArrow {
             cancelActiveHoldDueToCombo(
-                reasonLog: "Hold Control cancelled: arrow key during hold (keyCode=\(event.keyCode))"
+                reasonLog: "Hold Control cancelled: arrow (HID) keyCode=\(keyCode)"
             )
         } else {
             cancelActiveHoldDueToCombo(
-                reasonLog: "Hold Control cancelled: keyDown while Control held (keyCode=\(event.keyCode))"
+                reasonLog: "Hold Control cancelled: keyDown (HID) keyCode=\(keyCode)"
             )
         }
+    }
+
+    private func handleKeyDownDuringHold(_ event: NSEvent) {
+        considerCancellingHoldForPhysicalKeyDown(
+            keyCode: event.keyCode,
+            controlInEvent: event.modifierFlags.contains(.control),
+            isAutoRepeat: event.isARepeat,
+            sourceLabel: "NSEvent"
+        )
     }
 
     private func handleControlReleased() {
