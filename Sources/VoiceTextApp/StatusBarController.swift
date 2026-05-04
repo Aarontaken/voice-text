@@ -16,7 +16,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     override init() {
         super.init()
-        item.button?.title = "VT"
+        item.button?.toolTip = "VoiceText"
+        item.button?.setAccessibilityLabel("VoiceText")
+        applyStatusButton(image: StatusBarAssets.templateIcon, title: "")
         let menu = NSMenu()
         menu.delegate = self
         stateItem.isEnabled = false
@@ -57,25 +59,36 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         updateAccessibilityStatus()
         switch state {
         case .idle:
-            item.button?.title = "VT"
+            applyStatusButton(image: StatusBarAssets.templateIcon, title: "")
             stateItem.title = "空闲"
             toggleItem.title = "开始识别（\(hotkeyDescription)）"
         case .connecting:
-            item.button?.title = "…"
+            applyStatusButton(image: nil, title: "…")
             stateItem.title = "连接中"
             toggleItem.title = "停止识别"
         case .recording:
-            item.button?.title = "REC"
+            applyStatusButton(image: nil, title: "REC")
             stateItem.title = "识别中"
             toggleItem.title = "停止识别"
         case .draining:
-            item.button?.title = "…"
+            applyStatusButton(image: nil, title: "…")
             stateItem.title = "收尾中"
             toggleItem.title = "停止识别"
         case let .error(message):
-            item.button?.title = "!"
+            applyStatusButton(image: nil, title: "!")
             stateItem.title = "错误：\(message)"
             toggleItem.title = "重新开始"
+        }
+    }
+
+    private func applyStatusButton(image: NSImage?, title: String) {
+        let button = item.button
+        button?.image = image
+        button?.title = title
+        if image != nil, title.isEmpty {
+            button?.imagePosition = .imageOnly
+        } else {
+            button?.imagePosition = .noImage
         }
     }
 
@@ -107,6 +120,60 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+private enum StatusBarAssets {
+    /// 菜单栏模板图：较大声波 + 两条略细横线，整图单色由系统着色。
+    static let templateIcon: NSImage = makeTemplateIcon()
+
+    private static func makeTemplateIcon() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let pad = rect.width * 0.1
+            let inner = rect.insetBy(dx: pad, dy: pad)
+            let waveLineWidth = max(1.35, rect.width * 0.095)
+            let textLineWidth = max(0.65, rect.width * 0.048)
+
+            let yMid = inner.midY
+            let waveWidth = inner.width * 0.58
+            let amp = inner.height * 0.36
+            let steps = 20
+
+            let wavePath = NSBezierPath()
+            wavePath.lineWidth = waveLineWidth
+            wavePath.lineCapStyle = .round
+            wavePath.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            for i in 0 ... steps {
+                let t = CGFloat(i) / CGFloat(steps)
+                let x = inner.minX + t * waveWidth
+                let y = yMid + sin(t * .pi * 2) * amp
+                let p = NSPoint(x: x, y: y)
+                if i == 0 {
+                    wavePath.move(to: p)
+                } else {
+                    wavePath.line(to: p)
+                }
+            }
+            wavePath.stroke()
+
+            let xStart = inner.minX + inner.width * 0.62
+            let xEnd = inner.minX + inner.width * 0.92
+            let textPath = NSBezierPath()
+            textPath.lineWidth = textLineWidth
+            textPath.lineCapStyle = .round
+            NSColor.black.setStroke()
+            for frac in [-0.14, 0.14] as [CGFloat] {
+                let y = yMid + frac * inner.height
+                textPath.move(to: NSPoint(x: xStart, y: y))
+                textPath.line(to: NSPoint(x: xEnd, y: y))
+            }
+            textPath.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
 
