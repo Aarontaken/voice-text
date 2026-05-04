@@ -14,6 +14,9 @@ final class HoldControlKeyService {
     private var isControlPressed = false
     private var didBeginHold = false
     private var isLockedRecording = false
+    private var suppressTapUntilControlReleased = false
+    private var keyDownGlobalMonitor: Any?
+    private var keyDownLocalMonitor: Any?
 
     init(
         holdThreshold: TimeInterval,
@@ -56,20 +59,24 @@ final class HoldControlKeyService {
         }
         holdTimer?.invalidate()
         holdTimer = nil
+        removeKeyDownMonitors()
         pressBeganAt = nil
         isControlPressed = false
         didBeginHold = false
         isLockedRecording = false
+        suppressTapUntilControlReleased = false
         tapTracker.reset()
     }
 
     func resetTriggerState() {
         holdTimer?.invalidate()
         holdTimer = nil
+        removeKeyDownMonitors()
         pressBeganAt = nil
         isControlPressed = false
         didBeginHold = false
         isLockedRecording = false
+        suppressTapUntilControlReleased = false
         tapTracker.reset()
     }
 
@@ -79,6 +86,12 @@ final class HoldControlKeyService {
             handleControlPressed()
         } else if !controlPressed && isControlPressed {
             handleControlReleased()
+        }
+        if didBeginHold, controlPressed, isControlPressed {
+            let raw = UInt64(event.modifierFlags.rawValue)
+            if HoldControlExtraModifierDetector.shouldCancelHoldBecauseAddedModifiers(deviceIndependentRaw: raw) {
+                cancelActiveHoldDueToCombo(reasonLog: "Hold Control cancelled: extra modifier flags")
+            }
         }
     }
 
@@ -93,20 +106,73 @@ final class HoldControlKeyService {
             self.didBeginHold = true
             self.tapTracker.reset()
             VoiceTextLogger.log("Hold Control key began")
+            self.installKeyDownMonitorsIfNeeded()
             self.onHoldBegan()
         }
+    }
+
+    private func cancelActiveHoldDueToCombo(reasonLog: String) {
+        guard didBeginHold else { return }
+        VoiceTextLogger.log(reasonLog)
+        removeKeyDownMonitors()
+        didBeginHold = false
+        suppressTapUntilControlReleased = true
+        onHoldEnded()
+    }
+
+    private func installKeyDownMonitorsIfNeeded() {
+        guard keyDownGlobalMonitor == nil, keyDownLocalMonitor == nil else { return }
+        keyDownGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            DispatchQueue.main.async {
+                self?.handleKeyDownDuringHold(event)
+            }
+        }
+        keyDownLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            DispatchQueue.main.async {
+                self?.handleKeyDownDuringHold(event)
+            }
+            return event
+        }
+    }
+
+    private func removeKeyDownMonitors() {
+        if let keyDownGlobalMonitor {
+            NSEvent.removeMonitor(keyDownGlobalMonitor)
+            self.keyDownGlobalMonitor = nil
+        }
+        if let keyDownLocalMonitor {
+            NSEvent.removeMonitor(keyDownLocalMonitor)
+            self.keyDownLocalMonitor = nil
+        }
+    }
+
+    private func handleKeyDownDuringHold(_ event: NSEvent) {
+        guard didBeginHold, isControlPressed else { return }
+        guard event.modifierFlags.contains(.control) else { return }
+        if event.isARepeat { return }
+        if event.keyCode == 59 || event.keyCode == 62 { return }
+        cancelActiveHoldDueToCombo(reasonLog: "Hold Control cancelled: keyDown while Control held")
     }
 
     private func handleControlReleased() {
         isControlPressed = false
         holdTimer?.invalidate()
         holdTimer = nil
+        removeKeyDownMonitors()
+
+        if suppressTapUntilControlReleased {
+            suppressTapUntilControlReleased = false
+            pressBeganAt = nil
+            tapTracker.reset()
+            return
+        }
+
         let pressDuration = eventTimestamp() - (pressBeganAt ?? eventTimestamp())
         pressBeganAt = nil
         if didBeginHold {
-            didBeginHold = false
             VoiceTextLogger.log("Hold Control key ended")
             onHoldEnded()
+            didBeginHold = false
             return
         }
 

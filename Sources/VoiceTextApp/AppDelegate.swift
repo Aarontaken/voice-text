@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.updateHotkeyDescription(Self.hotkeyDescription(for: configuration))
 
         let holdControlKeyService = HoldControlKeyService(
-            holdThreshold: 0.25,
+            holdThreshold: 0.5,
             onHoldBegan: { [weak controller] in
                 controller?.start()
             },
