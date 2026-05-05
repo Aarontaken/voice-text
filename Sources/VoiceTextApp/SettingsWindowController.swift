@@ -423,6 +423,7 @@ final class SettingsWindowController: NSWindowController {
         }
     }
 
+
     private func applyAdvancedSettings(from config: ASRConfiguration) {
         silenceStopField.stringValue = String(config.silence4StopInMilli)
     }
@@ -472,4 +473,5 @@ final class SettingsWindowController: NSWindowController {
     private func hotkeyDescription(keyCode: UInt32, modifiers: UInt32) -> String {
         "按住 Option (⌥) 说话，松开结束\n双击 Control 开始/停止"
     }
+
 }

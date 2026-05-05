@@ -36,6 +36,8 @@ final class RecordingController {
     /// True after `sendSessionStop()` during drain; `finalizeSessionEnd` only closes the socket (no duplicate stop frame).
     private var endSessionStopAlreadySent = false
     private var drainTimeoutWorkItem: DispatchWorkItem?
+    /// 单次录音会话内最多提示一次，避免连续多句识别时反复弹窗。
+    private var didShowAccessibilityMissingAlertForThisRecording = false
     private var state: RecordingState = .idle {
         didSet {
             onStateChange?(state)
@@ -69,6 +71,7 @@ final class RecordingController {
         VoiceTextLogger.log("Recording start requested")
         let sessionID = UUID()
         recordingSessionID = sessionID
+        didShowAccessibilityMissingAlertForThisRecording = false
         onPreviewChange?(.preparing)
         pendingNonFinalPreviewText = nil
         endSessionStopAlreadySent = false
@@ -259,10 +262,12 @@ final class RecordingController {
         onPreviewChange?(.waiting)
         guard !delta.isEmpty else { return }
         VoiceTextLogger.log("ASR final insert textCount=\(result.text.count) insertCount=\(delta.count)")
+        warnIfAccessibilityMissingBeforeInsert()
         do {
             try textInserter.insert(delta)
         } catch {
             VoiceTextLogger.log("Text insertion failed: \(error.localizedDescription)")
+            presentInsertionFailureAlert()
         }
     }
 
@@ -315,10 +320,42 @@ final class RecordingController {
         let delta = textForInsertion(from: raw)
         guard !delta.isEmpty else { return }
         VoiceTextLogger.log("ASR flush pending preview on end textCount=\(raw.count) insertCount=\(delta.count)")
+        warnIfAccessibilityMissingBeforeInsert()
         do {
             try textInserter.insert(delta)
         } catch {
             VoiceTextLogger.log("Text insertion failed on pending preview flush: \(error.localizedDescription)")
+            presentInsertionFailureAlert()
+        }
+    }
+
+    private func warnIfAccessibilityMissingBeforeInsert() {
+        guard !textInserter.ensureAccessibilityPermission(prompt: false) else { return }
+        guard !didShowAccessibilityMissingAlertForThisRecording else { return }
+        didShowAccessibilityMissingAlertForThisRecording = true
+
+        let alert = NSAlert()
+        alert.messageText = "需要辅助功能权限"
+        alert.informativeText = "未开启时，识别结果往往无法写入当前输入框（模拟粘贴也会被系统拦截）。请在「系统设置 → 隐私与安全性 → 辅助功能」中为 VoiceText 打开开关。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "立即授权")
+        alert.addButton(withTitle: "稍后")
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            _ = textInserter.ensureAccessibilityPermission(prompt: true)
+        }
+    }
+
+    private func presentInsertionFailureAlert() {
+        let alert = NSAlert()
+        alert.messageText = "未能插入文字"
+        alert.informativeText = "请确认已授予辅助功能权限，且光标位于可编辑的输入框中。若已复制到剪贴板，可尝试手动粘贴。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "立即授权")
+        alert.addButton(withTitle: "好")
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            _ = textInserter.ensureAccessibilityPermission(prompt: true)
         }
     }
 }
