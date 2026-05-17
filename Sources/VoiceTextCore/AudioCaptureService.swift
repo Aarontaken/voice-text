@@ -18,8 +18,9 @@ public final class AudioCaptureService {
         case hardwareRouteChanged
     }
 
-    /// 每次会话使用新的引擎实例，避免蓝牙等路由切换后复用陈旧图导致断言或崩溃。
+    /// 每次会话复用引擎实例；仅当路由变更导致停止时才丢弃重建，避免蓝牙等路由切换后复用陈旧图导致断言或崩溃。
     private var engine: AVAudioEngine?
+    private var needsNewEngine = false
     private var configurationObserver: NSObjectProtocol?
     private let encoder = AACEncoder()
     private let targetFormat = AVAudioFormat(
@@ -67,7 +68,7 @@ public final class AudioCaptureService {
         encodedPacketCount = 0
         recordingSessionStartMediaTime = nil
 
-        let engine = AVAudioEngine()
+        let engine = self.engine ?? AVAudioEngine()
         self.engine = engine
 
         configurationObserver = NotificationCenter.default.addObserver(
@@ -102,6 +103,7 @@ public final class AudioCaptureService {
                 VoiceTextLogger.log(
                     "Audio engine configuration changed after stable capture \(Int(elapsed * 1000))ms buffers=\(self.capturedBufferCount); stopping capture"
                 )
+                self.needsNewEngine = true
                 let report = self.errorHandler
                 self.stop()
                 report?(CaptureError.hardwareRouteChanged)
@@ -135,6 +137,7 @@ public final class AudioCaptureService {
             throw error
         }
         recordingSessionStartMediaTime = CACurrentMediaTime()
+        needsNewEngine = false
         isRunning = true
     }
 
@@ -168,11 +171,15 @@ public final class AudioCaptureService {
             converter = nil
             packetHandler = nil
             errorHandler = nil
+            needsNewEngine = false
             return
         }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        self.engine = nil
+        if needsNewEngine {
+            self.engine = nil
+            needsNewEngine = false
+        }
         isRunning = false
         recordingSessionStartMediaTime = nil
         processingQueue.async { [encoder] in
