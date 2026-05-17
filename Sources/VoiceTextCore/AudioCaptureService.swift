@@ -40,6 +40,12 @@ public final class AudioCaptureService {
 
     public init() {}
 
+    deinit {
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     public func requestPermission(_ completion: @escaping (Bool) -> Void) {
         AVCaptureDevice.requestAccess(for: .audio, completionHandler: completion)
     }
