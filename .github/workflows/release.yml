@@ -46,6 +46,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: build/VoiceText-*-macos.zip
-          fail_on_unmatched: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
