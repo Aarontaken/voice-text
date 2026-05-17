@@ -11,11 +11,19 @@ VoiceText 是轻量 macOS **菜单栏** 语音输入工具：通过 **按住 Opt
 - 账号登录后持久化 ASR 鉴权信息。
 - 可调整 **完成停顿**（`silence4StopInMilli`），影响一句结束后的分段时机。
 
-## 下载与安装
+## 安装
 
-预编译包见 **[GitHub Releases](https://github.com/Aarontaken/voice-text/releases)**，下载 zip 后解压，将 `VoiceText.app` 拖入 **应用程序** 文件夹。
+**一行脚本（推荐）** — 安装最新 Release 到 `/Applications` 并启动：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aarontaken/voice-text/main/install.sh | bash
+```
+
+**手动** — [Releases](https://github.com/Aarontaken/voice-text/releases) 下载 `VoiceText-x.x.x-macos.zip`，解压后将 `VoiceText.app` 拖入 **应用程序** 文件夹。
 
 若系统提示未验证开发者，可在 **系统设置 → 隐私与安全性** 中允许运行，或对 App 右键 **打开** 一次。
+
+---
 
 从源码构建：
 
@@ -23,8 +31,6 @@ VoiceText 是轻量 macOS **菜单栏** 语音输入工具：通过 **按住 Opt
 ./scripts/build_app_bundle.sh
 open build/VoiceText.app
 ```
-
-产物为 ad-hoc 签名的 `build/VoiceText.app`，可手动拷贝到 `/Applications`。
 
 ## 环境要求
 
