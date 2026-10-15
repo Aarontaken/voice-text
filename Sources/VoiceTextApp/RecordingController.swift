@@ -267,7 +267,7 @@ final class RecordingController {
             try textInserter.insert(delta)
         } catch {
             VoiceTextLogger.log("Text insertion failed: \(error.localizedDescription)")
-            presentInsertionFailureAlert()
+            presentInsertionFailureAlert(for: error)
         }
     }
 
@@ -325,7 +325,7 @@ final class RecordingController {
             try textInserter.insert(delta)
         } catch {
             VoiceTextLogger.log("Text insertion failed on pending preview flush: \(error.localizedDescription)")
-            presentInsertionFailureAlert()
+            presentInsertionFailureAlert(for: error)
         }
     }
 
@@ -343,6 +343,24 @@ final class RecordingController {
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
             _ = textInserter.ensureAccessibilityPermission(prompt: true)
+        }
+    }
+
+    /// 针对不同失败原因给出可操作的提示：安全输入／缺权限时识别结果已经留在剪贴板，
+    /// 不该再让用户以为「什么都没发生」。
+    private func presentInsertionFailureAlert(for error: Error) {
+        switch error as? TextInsertionService.InsertionError {
+        case .secureInputActive:
+            let alert = NSAlert()
+            alert.messageText = "当前处于安全键盘输入"
+            alert.informativeText = "焦点在密码框等启用了安全键盘输入的位置，系统会拦截模拟按键，因此没有自动写入。识别结果已复制到剪贴板，可按 ⌘V 手动粘贴。"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "好")
+            alert.runModal()
+        case .accessibilityPermissionMissing:
+            presentInsertionFailureAlert()
+        default:
+            presentInsertionFailureAlert()
         }
     }
 
