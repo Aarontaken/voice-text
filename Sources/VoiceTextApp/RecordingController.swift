@@ -34,6 +34,7 @@ final class RecordingController {
     private var recordingSessionID = UUID()
     private var insertedSegmentCount = 0
     private var didShowInsertionFailureAlert = false
+    private var isPresentingMicrophoneAlert = false
     private var state: RecordingState = .idle {
         didSet {
             onStateChange?(state)
@@ -67,6 +68,16 @@ final class RecordingController {
         guard configuration.hasAPIKey else {
             presentMissingAPIKeyAlert()
             state = .error("请先在设置中填写豆包 API Key")
+            return
+        }
+
+        // 合盖时 macOS 在硬件层断开内建麦克风，采集链路不报错、只会一直上传静音。
+        // 与其让用户对着「没有反应」猜半天，不如在建立连接前就拦下来并说清楚。
+        guard !isPresentingMicrophoneAlert else { return }
+        if let issue = MicrophoneAvailability.currentIssue() {
+            VoiceTextLogger.log("Recording blocked by microphone preflight: \(issue.statusText)")
+            presentMicrophoneUnavailableAlert(for: issue)
+            state = .error(issue.statusText)
             return
         }
 
@@ -269,6 +280,40 @@ final class RecordingController {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "好")
         alert.runModal()
+    }
+
+    private func presentMicrophoneUnavailableAlert(for issue: MicrophoneAvailability.Issue) {
+        isPresentingMicrophoneAlert = true
+        defer { isPresentingMicrophoneAlert = false }
+
+        // 触发时焦点多半在别的 App 里，不主动激活的话对话框会被压在后面，等于没提示。
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = issue.title
+        alert.informativeText = issue.detail
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "打开声音设置")
+        alert.addButton(withTitle: "好")
+        if alert.runModal() == .alertFirstButtonReturn {
+            openSoundInputSettings()
+        }
+    }
+
+    /// 打开「系统设置 → 声音」，方便用户直接挑外置麦克风。
+    /// 新老系统的锚点不通用（Ventura 前后各一套），逐个尝试。
+    private func openSoundInputSettings() {
+        let anchors = [
+            "x-apple.systempreferences:com.apple.preference.sound",
+            "x-apple.systempreferences:com.apple.Sound-Settings.extension"
+        ]
+        for anchor in anchors {
+            guard let url = URL(string: anchor) else { continue }
+            if NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+        VoiceTextLogger.log("Failed to open Sound settings")
     }
 
     /// 针对不同失败原因给出可操作的提示：安全输入／缺权限时识别结果已经留在剪贴板，
