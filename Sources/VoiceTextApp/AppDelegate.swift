@@ -11,11 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewWindowController: RecognitionPreviewWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        VoiceTextLogger.log(
+            "App launch bundle=\(Bundle.main.bundlePath) accessibilityTrusted=\(textInserter.ensureAccessibilityPermission(prompt: false))"
+        )
         let configuration = loadConfiguration()
         let controller = RecordingController(
             configuration: configuration,
-            textInserter: textInserter,
-            settingsStore: settingsStore
+            textInserter: textInserter
         )
         let statusController = StatusBarController()
         let previewWindowController = RecognitionPreviewWindowController()
@@ -26,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch state {
                 case .idle, .error:
                     self?.holdOptionKeyService?.resetTriggerState()
-                case .connecting, .recording, .draining:
+                case .connecting, .recording, .finalizing:
                     break
                 }
             }
@@ -61,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.textInserter.ensureAccessibilityPermission(prompt: false) ?? false
         }
         statusController.updateAccessibilityStatus()
-        statusController.updateHotkeyDescription(Self.hotkeyDescription(for: configuration))
+        statusController.updateHotkeyDescription(Self.hotkeyDescription)
 
         let holdOptionKeyService = HoldOptionKeyService(
             holdThreshold: 0.25,
@@ -81,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusController = statusController
         self.holdOptionKeyService = holdOptionKeyService
         self.previewWindowController = previewWindowController
+
+        if CommandLine.arguments.contains("--settings") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.openSettings()
+            }
+        }
     }
 
     private func loadConfiguration() -> ASRConfiguration {
@@ -94,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openSettings() {
         let controller = SettingsWindowController(settingsStore: settingsStore) { [weak self] configuration in
             self?.recordingController?.update(configuration: configuration)
-            self?.statusController?.updateHotkeyDescription(Self.hotkeyDescription(for: configuration))
+            self?.statusController?.updateHotkeyDescription(Self.hotkeyDescription)
         }
         settingsWindowController = controller
         controller.window?.center()
@@ -103,7 +111,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private static func hotkeyDescription(for configuration: ASRConfiguration) -> String {
-        "按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止"
-    }
+    private static let hotkeyDescription = "按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止"
 }

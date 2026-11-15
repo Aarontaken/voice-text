@@ -2,6 +2,9 @@ import AVFoundation
 import Foundation
 import QuartzCore
 
+/// 采集麦克风并输出 **16kHz / 16bit / 单声道 PCM**。
+///
+/// 编码与分帧不再由采集层负责：豆包要的是裸 PCM，供应商差异交给 ASR 会话层。
 public final class AudioCaptureService {
     /// 引擎刚启动的一段时间内，`AVAudioEngineConfigurationChange` 常被误触发，勿当作真实路由切换。
     private static let configurationWarmupSeconds: CFTimeInterval = 0.45
@@ -22,7 +25,6 @@ public final class AudioCaptureService {
     private var engine: AVAudioEngine?
     private var needsNewEngine = false
     private var configurationObserver: NSObjectProtocol?
-    private let encoder = AACEncoder()
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
         sampleRate: 16_000,
@@ -33,8 +35,7 @@ public final class AudioCaptureService {
     private let processingQueue = DispatchQueue(label: "AudioCaptureService.processingQueue")
     private var isRunning = false
     private var capturedBufferCount = 0
-    private var encodedPacketCount = 0
-    private var packetHandler: ((Data) -> Void)?
+    private var pcmHandler: ((Data) -> Void)?
     private var errorHandler: ((Error) -> Void)?
     /// 当前这次 `engine.start()` 成功的单调时钟原点；未完成启动则为 nil。
     private var recordingSessionStartMediaTime: CFTimeInterval?
@@ -52,7 +53,7 @@ public final class AudioCaptureService {
     }
 
     public func start(
-        onPacket: @escaping (Data) -> Void,
+        onPCM: @escaping (Data) -> Void,
         onError: @escaping (Error) -> Void
     ) throws {
         guard AVCaptureDevice.authorizationStatus(for: .audio) != .denied else {
@@ -62,10 +63,9 @@ public final class AudioCaptureService {
             throw CaptureError.invalidInputFormat
         }
 
-        packetHandler = onPacket
+        pcmHandler = onPCM
         errorHandler = onError
         capturedBufferCount = 0
-        encodedPacketCount = 0
         recordingSessionStartMediaTime = nil
 
         let engine = self.engine ?? AVAudioEngine()
@@ -169,7 +169,7 @@ public final class AudioCaptureService {
             isRunning = false
             recordingSessionStartMediaTime = nil
             converter = nil
-            packetHandler = nil
+            pcmHandler = nil
             errorHandler = nil
             needsNewEngine = false
             return
@@ -182,11 +182,8 @@ public final class AudioCaptureService {
         }
         isRunning = false
         recordingSessionStartMediaTime = nil
-        processingQueue.async { [encoder] in
-            encoder.reset()
-        }
         converter = nil
-        packetHandler = nil
+        pcmHandler = nil
         errorHandler = nil
     }
 
@@ -216,23 +213,23 @@ public final class AudioCaptureService {
             return
         }
 
-        do {
-            let packets = try encoder.encodePackets(convertedBuffer)
-            for packet in packets {
-                encodedPacketCount += 1
-                if encodedPacketCount == 1 || encodedPacketCount % 20 == 0 {
-                    VoiceTextLogger.log("Audio encoded packets=\(encodedPacketCount) bytes=\(packet.count)")
-                }
-                if encodedPacketCount == 1 {
-                    VoiceTextLogger.log("Audio first packet hex=\(packet.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " "))")
-                }
-                packetHandler?(packet)
-            }
-        } catch AACEncoder.EncoderError.emptyOutput {
+        let audioBufferList = UnsafeMutableAudioBufferListPointer(convertedBuffer.mutableAudioBufferList)
+        guard let firstBuffer = audioBufferList.first,
+              let dataPointer = firstBuffer.mData,
+              convertedBuffer.frameLength > 0 else {
             return
-        } catch {
-            errorHandler?(error)
         }
+
+        // 目标格式是 Int16 单声道：有效字节数由 frameLength 决定，
+        // 不能直接用 mDataByteSize（部分情况下它是缓冲区容量而不是实际长度）。
+        let byteCount = min(
+            Int(convertedBuffer.frameLength) * MemoryLayout<Int16>.size,
+            Int(firstBuffer.mDataByteSize)
+        )
+        guard byteCount > 0 else { return }
+
+        let pcm = Data(bytes: dataPointer, count: byteCount)
+        pcmHandler?(pcm)
     }
 }
 

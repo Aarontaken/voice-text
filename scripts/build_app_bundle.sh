@@ -8,6 +8,12 @@ APP_DIR="$ROOT_DIR/build/VoiceText.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 
+# Core 源码按目录组织（ASR/ 等子目录），手动编译回退路径也必须递归收集。
+CORE_SOURCES=()
+while IFS= read -r -d '' source_file; do
+  CORE_SOURCES+=("$source_file")
+done < <(find "$ROOT_DIR/Sources/VoiceTextCore" -name '*.swift' -print0)
+
 if swift build -c release --product VoiceTextApp; then
   EXECUTABLE="$BUILD_DIR/VoiceTextApp"
 else
@@ -16,7 +22,7 @@ else
   swiftc -O -emit-library -emit-module \
     -module-name VoiceTextCore \
     -sdk "$SDK_PATH" \
-    "$ROOT_DIR"/Sources/VoiceTextCore/*.swift \
+    "${CORE_SOURCES[@]}" \
     -emit-module-path "$MANUAL_BUILD_DIR/VoiceTextCore.swiftmodule" \
     -Xlinker -install_name \
     -Xlinker @rpath/libVoiceTextCore.dylib \
@@ -65,6 +71,17 @@ sips -z 512 512 "$ICON_SRC" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
 sips -z 1024 1024 "$ICON_SRC" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_OUT"
 
-codesign --force --deep --sign - "$APP_DIR"
+# 用稳定的签名身份，避免每次重建后 TCC（辅助功能/麦克风）授权失效。
+# 可通过 CODESIGN_IDENTITY 覆盖；CI 上没有证书时退回 ad-hoc。
+SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"
+if [ -z "$SIGNING_IDENTITY" ]; then
+  if security find-identity -v -p codesigning 2>/dev/null | grep -Fq '"VoiceText Local Dev"'; then
+    SIGNING_IDENTITY="VoiceText Local Dev"
+  else
+    SIGNING_IDENTITY="-"
+  fi
+fi
+codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_DIR"
 
+echo "Signed with identity: $SIGNING_IDENTITY"
 echo "Built $APP_DIR"

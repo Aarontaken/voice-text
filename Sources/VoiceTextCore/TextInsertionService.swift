@@ -137,16 +137,21 @@ public final class TextInsertionService {
 
         postPasteCommand()
 
-        usleep(useconds_t(Self.clipboardRestoreDelay * 1_000_000))
+        // 恢复剪贴板延迟执行、不阻塞主线程：实时识别每句话都会插入一次，
+        // 如果这里 sleep 0.5s，逐句落字时 HUD 和事件处理会被卡住。
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.clipboardRestoreDelay) { [weak self] in
+            guard let self else { return }
+            let currentPasteboard = NSPasteboard.general
 
-        // 只在剪贴板仍是我们写进去的那一份时恢复，避免覆盖用户这期间的新复制。
-        guard pasteboard.changeCount == stagedChangeCount else {
-            VoiceTextLogger.log("Text pasted count=\(text.count) clipboardChangedByUser=true (kept user clipboard)")
-            return
+            // 只在剪贴板仍是我们写进去的那一份时恢复，避免覆盖用户这期间的新复制。
+            guard currentPasteboard.changeCount == stagedChangeCount else {
+                VoiceTextLogger.log("Text pasted count=\(text.count) clipboardChangedByUser=true (kept user clipboard)")
+                return
+            }
+
+            self.restoreGeneralPasteboard(snapshot: snapshot)
+            VoiceTextLogger.log("Text pasted count=\(text.count)")
         }
-
-        restoreGeneralPasteboard(snapshot: snapshot)
-        VoiceTextLogger.log("Text pasted count=\(text.count)")
     }
 
     /// 合成一次 ⌘V。
@@ -192,5 +197,18 @@ public final class TextInsertionService {
         pasteUp.flags = commandFlags
         commandUp.flags = []
         return [commandDown, pasteDown, pasteUp, commandUp]
+    }
+}
+
+extension TextInsertionService.InsertionError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .accessibilityPermissionMissing:
+            return "未授予辅助功能权限，识别结果已复制到剪贴板"
+        case .pasteboardWriteFailed:
+            return "剪贴板写入失败"
+        case .secureInputActive:
+            return "当前处于安全键盘输入，识别结果已复制到剪贴板"
+        }
     }
 }

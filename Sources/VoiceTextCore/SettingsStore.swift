@@ -15,7 +15,34 @@ public final class SettingsStore {
         }
 
         let data = try Data(contentsOf: fileURL)
-        return try JSONDecoder().decode(ASRConfiguration.self, from: data)
+        let configuration = try JSONDecoder().decode(ASRConfiguration.self, from: data)
+
+        // 旧版 settings.json 里还留着手机号/密码/token/cookie，加载时顺手重写，
+        // 把已经废弃的小猿账号字段从磁盘上清掉。
+        if Self.containsLegacyKeys(in: data) {
+            try? save(configuration)
+        }
+        return configuration
+    }
+
+    private static let legacyKeys: Set<String> = [
+        "environment",
+        "userId",
+        "role",
+        "deviceId",
+        "cookieHeader",
+        "phoneNumber",
+        "password",
+        "authToken",
+        "silence4StopInMilli",
+        "useAutoVAD"
+    ]
+
+    private static func containsLegacyKeys(in data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return !legacyKeys.isDisjoint(with: root.keys)
     }
 
     public func save(_ configuration: ASRConfiguration) throws {
@@ -26,6 +53,8 @@ public final class SettingsStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(configuration)
         try data.write(to: fileURL, options: .atomic)
+        // 配置里有 API Key，尽量只让当前用户可读。
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 
     public static func defaultFileURL() -> URL {

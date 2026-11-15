@@ -11,7 +11,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let stateItem = NSMenuItem(title: "空闲", action: nil, keyEquivalent: "")
     private let hotkeyItem = NSMenuItem(title: "快捷键：按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止", action: nil, keyEquivalent: "")
     private let accessibilityStatusItem = NSMenuItem(title: "辅助功能：未知", action: nil, keyEquivalent: "")
-    private var hotkeyDescription = "按住 Option (⌥) 说话，松开结束；双击 Control 开始/停止"
+    private let accessibilityActionItem = NSMenuItem(title: "授权辅助功能", action: #selector(requestAccessibility), keyEquivalent: "")
+    private let settingsItem = NSMenuItem(title: "设置", action: #selector(openSettings), keyEquivalent: ",")
+    private let quitItem = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
     private var didBecomeActiveObserver: NSObjectProtocol?
 
     override init() {
@@ -22,18 +24,28 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         stateItem.isEnabled = false
+        stateItem.image = Self.symbol("waveform")
         menu.addItem(stateItem)
         menu.addItem(.separator())
         toggleItem.target = self
+        toggleItem.image = Self.symbol("mic")
         menu.addItem(toggleItem)
         hotkeyItem.isEnabled = false
+        hotkeyItem.image = Self.symbol("keyboard")
         menu.addItem(hotkeyItem)
-        menu.addItem(NSMenuItem(title: "设置", action: #selector(openSettings), keyEquivalent: ",").targeting(self))
+        settingsItem.target = self
+        settingsItem.image = Self.symbol("gearshape")
+        menu.addItem(settingsItem)
         accessibilityStatusItem.isEnabled = false
+        accessibilityStatusItem.image = Self.symbol("hand.raised")
         menu.addItem(accessibilityStatusItem)
-        menu.addItem(NSMenuItem(title: "授权辅助功能", action: #selector(requestAccessibility), keyEquivalent: "").targeting(self))
+        accessibilityActionItem.target = self
+        accessibilityActionItem.image = Self.symbol("lock.shield")
+        menu.addItem(accessibilityActionItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q").targeting(self))
+        quitItem.target = self
+        quitItem.image = Self.symbol("power")
+        menu.addItem(quitItem)
         item.menu = menu
 
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
@@ -61,23 +73,33 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         case .idle:
             applyStatusButton(image: StatusBarAssets.templateIcon, title: "")
             stateItem.title = "空闲"
-            toggleItem.title = "开始识别（\(hotkeyDescription)）"
+            stateItem.image = Self.symbol("waveform")
+            toggleItem.title = "开始识别"
+            toggleItem.image = Self.symbol("mic")
         case .connecting:
             applyStatusButton(image: nil, title: "…")
             stateItem.title = "连接中"
+            stateItem.image = Self.symbol("ellipsis.circle")
             toggleItem.title = "停止识别"
+            toggleItem.image = Self.symbol("stop.circle")
         case .recording:
             applyStatusButton(image: nil, title: "REC")
             stateItem.title = "识别中"
+            stateItem.image = Self.symbol("record.circle")
             toggleItem.title = "停止识别"
-        case .draining:
+            toggleItem.image = Self.symbol("stop.circle")
+        case .finalizing:
             applyStatusButton(image: nil, title: "…")
-            stateItem.title = "收尾中"
-            toggleItem.title = "停止识别"
+            stateItem.title = "识别中"
+            stateItem.image = Self.symbol("waveform")
+            toggleItem.title = "等待识别结果"
+            toggleItem.image = Self.symbol("hourglass")
         case let .error(message):
             applyStatusButton(image: nil, title: "!")
             stateItem.title = "错误：\(message)"
+            stateItem.image = Self.symbol("exclamationmark.triangle")
             toggleItem.title = "重新开始"
+            toggleItem.image = Self.symbol("arrow.clockwise")
         }
     }
 
@@ -95,14 +117,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func updateAccessibilityStatus() {
         let isTrusted = accessibilityStatusProvider?() ?? false
         accessibilityStatusItem.title = isTrusted ? "辅助功能：已开启" : "辅助功能：未开启"
+        accessibilityStatusItem.image = Self.symbol(isTrusted ? "checkmark.circle" : "exclamationmark.circle")
+        accessibilityActionItem.isHidden = isTrusted
     }
 
     func updateHotkeyDescription(_ description: String) {
-        hotkeyDescription = description
         hotkeyItem.title = "快捷键：\(description)"
-        if toggleItem.title.hasPrefix("开始识别") {
-            toggleItem.title = "开始识别（\(description)）"
-        }
+    }
+
+    private static func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.isTemplate = true
+        return image
     }
 
     @objc private func toggle() {
@@ -174,12 +200,5 @@ private enum StatusBarAssets {
         }
         image.isTemplate = true
         return image
-    }
-}
-
-private extension NSMenuItem {
-    func targeting(_ target: AnyObject) -> NSMenuItem {
-        self.target = target
-        return self
     }
 }
